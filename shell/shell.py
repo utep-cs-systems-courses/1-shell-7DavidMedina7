@@ -10,18 +10,18 @@ def change_directory(user_array):
         print(f"{user_array[0]}: no such file or directory: {user_array[1]}")
 
         
-# ** Function to execute programs **
-def execute_programs(user_array):
+# ** Function to execute program **
+def execute_program(user_array):
     # Search each directory in PATH
     for dir in re.split(":", os.environ['PATH']):
         # Obtain the program
-        program = "%s/%s" % (dir, args[0])
+        program = "%s/%s" % (dir, user_array[0])
         try:
             # Attemp to execute program
-            os.execve(program, args, os.environ) # try to exec program
+            os.execve(program, user_array, os.environ) # try to exec program
         except FileNotFoundError:             # ...expected
             pass                              # ...fail quietly lol
-    os.write(2, ("Child:    Error: Could not exec %s\n" % args[0]).encode())
+    os.write(2, ("Child:    Error: Could not exec %s\n" % user_array[0]).encode())
     sys.exit(1)                 # terminate with error
 
                                             
@@ -35,11 +35,9 @@ def list_directory(user_array):
         print("{user_array[0]}: no such file or directory: {user_array[1]}")
     print(directories)
         
-# ** Function for redirection **
-def redirection(user_array):
-    return
 
-
+# Obtaining the P-ID
+pid = os.getpid()
 # *** INITIAL START OF PROGRAM ***
 while True:
     # Checking if PS1 is set in our environment
@@ -65,10 +63,44 @@ while True:
         sys.exit(0)
 
     # Executing <Change directory> command
-    if "cd" == user_array[0]:
+    elif "cd" == user_array[0]:
         print("This is the cd command.")
         change_directory(user_array)
 
     # Executing <List files in directory> command
-    if "ls" == user_array[0]:
+    elif "ls" == user_array[0]:
         list_directory(user_array)
+
+    else:
+        # Forking begins~
+        os.write(1, ("About to fork (pid:%d)\n" % pid).encode())
+
+        # Obtaining the race condition
+        rc = os.fork()
+
+        # Fork failed~
+        if rc < 0:
+            os.write(2, ("Fork failed, returning %d\n" % rc).encode())
+            sys.exit(1)
+
+        # This is the child~
+        elif rc == 0:
+            os.write(1, ("Child: My pid==%d.  Parent's pid=%d\n" % (os.getpid(), pid)).encode())
+
+            if "/" in user_array[0]:
+                try:
+                    os.execve(user_array[0], user_array, os.environ)
+                except FileNotFoundError:
+                    pass
+
+            elif "<" in user_array or ">" in user_array:
+                execute_program(user_array)
+
+        # This is the parent (fork was succesful~
+        else:
+            os.write(1, ("Parent: My pid=%d.  Child's pid=%d\n" % (pid, rc)).encode())
+            childPidCode = os.wait()
+            os.write(1, ("Parent: Child %d terminated with exit code %d\n"
+                         % childPidCode).encode())
+        
+        
