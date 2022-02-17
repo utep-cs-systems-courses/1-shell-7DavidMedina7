@@ -39,26 +39,53 @@ def redirect(path, file_descriptor):
     os.set_inheritable(file_descriptor, True)
     path = path[:1]
     return path
+
+
+# / Helper function for the pipe() function /
+def pipe_helper(pipe_read, pipe_write, program, fd_type):
+
+    # Checks for what to duplicate
+    dup_this = pipe_write if fd_type == 1 else pipe_read
     
-    
-# ** Function that will list all files in the current directory **
-def list_directory(path):
-    try:
-        # | WHAT??? COME BACK TO THIS BC IDK WHY NO WORKY |
-        directories = os.listdir(path[1])
-        print(directories)
-    except:
-        print("{path[0]}: no such file or directory: {path[1]}")
-    print(directories)
-        
+    os.close(fd_type)
+    os.dup(dup_this)
+    os.set_inheritable(fd_type, True)
+
+    for file_descriptor in (pipe_read, pipe_write):
+        execute_program(program)
+    #sys.exit(1)
+
 
 # ** Function that will handle all the pipe work **
 def pipe(path):
     print("We in here boys ;)")
+    pipe_split_index = path.index("|")
+    w = path[0:pipe_split_index]
+    r = path[pipe_split_index + 1:]
+    print("This is w: " + str(w))
+    print("This is r: " + str(r) + "\n")
 
+    pipe_read, pipe_write = os.pipe()
+
+    # Forking begins~
+    rc = os.fork()
+
+    # This is the child (write side of pipe)~
+    if rc == 0:
+        # Let's goooo pipe magic
+        pipe_helper(pipe_read, pipe_write, w, 1)
+
+    # This is the child (read side of pipe)~
+    elif rc > 0:
+        # Let's goooo pipe magic pt.2
+        pipe_helper(pipe_read, pipe_write, r, 0)
+
+    # Fork failed~
+    else:
+        os.write(2, ("Fork failed, returning %d\n" % rc).encode())
+        sys.exit(1)
     
-# Obtaining the P-ID
-pid = os.getpid()
+
 # *** INITIAL START OF PROGRAM ***
 while True:
     # Checking if PS1 is set in our environment
@@ -82,10 +109,6 @@ while True:
     # Executing <Change directory> command
     elif "cd" == user_input[0]:
         change_directory(user_input)
-
-    # Executing <List files in directory> command
-    elif "ls" == user_input[0]:
-        list_directory(user_input)
 
     # Executing <Pipe> command
     elif "|" in user_input:
@@ -127,5 +150,3 @@ while True:
                          % childPidCode).encode())
             # Wait for the rest to finish their processes
             child_pid = os.wait()
-        
-        
