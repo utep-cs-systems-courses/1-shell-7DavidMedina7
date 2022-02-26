@@ -1,3 +1,4 @@
+
 import os, sys, re 
 
 
@@ -27,18 +28,9 @@ def execute_program(path):
         except FileNotFoundError:
             # Fail quitely lol
             pass                          
-    os.write(2, ("Child:    Error: Could not exec %s\n" % user_input[0]).encode())
+    os.write(2, ("Child:    Error: Could not exec %s\n" % path[0]).encode())
     # Terminate with error
     sys.exit(1)        
-
-
-# ** Function for redirection **
-def redirect(path, file_descriptor):
-    os.close(file_descriptor)
-    os.open(path[2], os.O_CREAT | os.O_WRONLY)
-    os.set_inheritable(file_descriptor, True)
-    path = path[:1]
-    return path
 
 
 # / Helper function for the pipe() function /
@@ -53,7 +45,7 @@ def pipe_helper(pipe_read, pipe_write, program, fd_type):
 
     for file_descriptor in (pipe_read, pipe_write):
         execute_program(program)
-    #sys.exit(1)
+    sys.exit(1)
 
 
 # ** Function that will handle all the pipe work **
@@ -84,8 +76,9 @@ def pipe(path):
     else:
         os.write(2, ("Fork failed, returning %d\n" % rc).encode())
         sys.exit(1)
-    
 
+# Obtaining the P-ID
+pid = os.getpid()    
 # *** INITIAL START OF PROGRAM ***
 while True:
     # Checking if PS1 is set in our environment
@@ -133,20 +126,30 @@ while True:
 
             if ">" in user_input:
                 # Redirect with file descriptor 1: stdout
-                user_input = redirect(user_input, 1)
-                
-            elif "<" in user_input:
+                print("We are about to > redirect.")
+                os.close(1)
+                # Creates file specified on input, otherwise, write on it
+                os.open(user_input[2], os.O_CREAT | os.O_WRONLY)
+                # Inherit with flag code #1
+                os.set_inheritable(1, True)
+                user_input = user_input[:1]
+            if "<" in user_input:
                 # Redirect with file descriptor 0: stdin
-                user_input = redirect(user_input, 0)
+                print("We are about to < redirect.")
+                os.close(0)
+                # Opening the file specified on input only for reading
+                os.open(user_input[2], os.O_RDONLY)
+                # Inherit with flag code #0
+                os.set_inheritable(0, True)
+                user_input = user_input[:1]
 
             # Execute the progam at hand
-            execute_program(path)
+            execute_program(user_input)
             
         # This is the parent (fork was succesful)~
         else:
             os.write(1, ("Parent: My pid=%d.  Child's pid=%d\n" % (pid, rc)).encode())
+            # Wait for the rest to finish their processes
             childPidCode = os.wait()
             os.write(1, ("Parent: Child %d terminated with exit code %d\n"
                          % childPidCode).encode())
-            # Wait for the rest to finish their processes
-            child_pid = os.wait()
